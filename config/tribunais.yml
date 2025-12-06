@@ -1,0 +1,13 @@
+tribunais:
+  - nome: "TJSP"
+    tipo: "esaj"
+    url: "https://esaj.tjsp.jus.br"
+    uf: "SP"
+  - nome: "TRT3"
+    tipo: "pje"
+    url: "https://pje.trt3.jus.br"
+    uf: "MG"
+  - nome: "TJMG"
+    tipo: "pje"
+    url: "https://pje.tjmg.jus.br"
+    uf: "MG"

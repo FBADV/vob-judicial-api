@@ -1,0 +1,348 @@
+openapi: 3.0.3
+info:
+  title: Judicial API
+  version: 1.0.0
+  description: |
+    API robusta para automação e consulta de dados judiciais.
+    Integração com múltiplos tribunais (PJe, e-SAJ, e-Proc) e gerenciamento de processos.
+    
+    ## Recursos
+    - **Autenticação**: Suporte a OAuth2 e Bearer Tokens.
+    - **Processos**: Cadastro e Consulta unificada.
+    - **Automação**: Importação massiva via OAB (Background Jobs).
+    - **Documentos**: Acesso a peças e resumos gerados por IA.
+contact:
+  name: Equipe VOB Mandakaru
+  email: dev@vob.legal
+
+servers:
+  - url: http://localhost:8000
+    description: Servidor de Desenvolvimento Local
+
+paths:
+  /auth/login:
+    post:
+      summary: Autenticação de Usuário (Password Flow)
+      description: Obtém um JWT Access Token usando credenciais de usuário.
+      tags:
+        - Auth
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  example: "fred"
+                password:
+                  type: string
+                  format: password
+                  example: "secret"
+                scope:
+                  type: string
+                client_id:
+                  type: string
+                client_secret:
+                  type: string
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: Login realizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              example:
+                access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                token_type: "bearer"
+        '401':
+          description: Credenciais inválidas
+
+  /processos/cadastrar:
+    post:
+      summary: Cadastrar Processo Manualmente
+      tags:
+        - Processos
+      security:
+        - bearerAuth: []
+        - oauth2_client_creds: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcessoCreate'
+      responses:
+        '200':
+          description: Processo registrado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Processo'
+              example:
+                id: 123
+                numero_cnj: "5001234-88.2023.8.13.0024"
+                titulo: "Ação de Cobrança Indevida"
+                cliente_nome: "Empresa XPTO Ltda"
+                valor_causa: "50000.00"
+                advogado:
+                  nome: "Dr. Fred"
+                  oab: "MG123456"
+                created_at: "2023-10-27T14:30:00Z"
+
+  /processos/{id}:
+    get:
+      summary: Consultar Detalhes do Processo
+      tags:
+        - Processos
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID interno do processo
+      responses:
+        '200':
+          description: Detalhes completos do processo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessoDetail'
+        '404':
+          description: Processo não encontrado
+
+  /oab/importar:
+    post:
+      summary: Importar Processos por OAB (Background Job)
+      description: Dispara um crawler assíncrono para buscar processos em todos os tribunais configurados.
+      tags:
+        - Automação
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OABImportRequest'
+            example:
+              oab_num: "123456"
+              oab_uf: "MG"
+              auth_method: "a1"
+              pfx_password: "senha_do_certificado"
+      responses:
+        '202':
+          description: Job aceito e enfileirado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OABImportResponse'
+              example:
+                task_id: "a1b2c3d4-e5f6-7890-1234-567890abcdef"
+                message: "Importação iniciada para OAB 123456/MG"
+                status: "queued"
+
+  /documentos/{doc_id}/resumo:
+    get:
+      summary: Obter Resumo de Documento (IA)
+      tags:
+        - Documentos
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: doc_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Resumo gerado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentSummary'
+              example:
+                doc_id: 999
+                resumo: "Petição inicial requerendo indenização por danos materiais no valor de R$ 10.000,00."
+                ml_model_version: "v2.1-nlp-legal"
+                generated_at: "2023-11-01T10:00:00Z"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    oauth2_client_creds:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: /auth/token
+          scopes:
+            read:processos: Permissão de leitura
+            write:processos: Permissão de escrita
+
+  schemas:
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+      required:
+        - access_token
+        - token_type
+
+    Advogado:
+      type: object
+      properties:
+        id:
+          type: integer
+        nome:
+          type: string
+        oab:
+          type: string
+        email:
+          type: string
+
+    ProcessoCreate:
+      type: object
+      properties:
+        numero_cnj:
+          type: string
+          pattern: '^\d{7}-\d{2}\.\d{4}\.\d{1}\.\d{2}\.\d{4}$'
+        titulo:
+          type: string
+        cliente_nome:
+          type: string
+        valor_causa:
+          type: string
+        advogado_oab:
+          type: string
+      required:
+        - numero_cnj
+        - advogado_oab
+
+    Processo:
+      type: object
+      properties:
+        id:
+          type: integer
+        numero_cnj:
+          type: string
+        titulo:
+          type: string
+        cliente_nome:
+          type: string
+        valor_causa:
+          type: string
+        advogado:
+          $ref: '#/components/schemas/Advogado'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Andamento:
+      type: object
+      properties:
+        id:
+          type: integer
+        data:
+          type: string
+          format: date-time
+        descricao:
+          type: string
+        conteudo:
+          type: string
+
+    Documento:
+      type: object
+      properties:
+        id:
+          type: integer
+        titulo:
+          type: string
+        tipo:
+          type: string
+          enum: [PETICAO, SENTENCA, DESPACHO, OUTROS]
+        url_origem:
+          type: string
+          format: uri
+        local_path:
+          type: string
+
+    ProcessoDetail:
+      allOf:
+        - $ref: '#/components/schemas/Processo'
+        - type: object
+          properties:
+            andamentos:
+              type: array
+              items:
+                $ref: '#/components/schemas/Andamento'
+            documentos:
+              type: array
+              items:
+                $ref: '#/components/schemas/Documento'
+
+    OABImportRequest:
+      type: object
+      properties:
+        oab_num:
+          type: string
+          description: Número da Carteira da OAB
+        oab_uf:
+          type: string
+          minLength: 2
+          maxLength: 2
+        auth_method:
+          type: string
+          enum: [a1, login]
+        login:
+          type: string
+        senha:
+          type: string
+          format: password
+        pfx_password:
+          type: string
+          format: password
+      required:
+        - oab_num
+        - oab_uf
+        - auth_method
+
+    OABImportResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+          format: uuid
+        message:
+          type: string
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+
+    DocumentSummary:
+      type: object
+      properties:
+        doc_id:
+          type: integer
+        resumo:
+          type: string
+        ml_model_version:
+          type: string
+        generated_at:
+          type: string
+          format: date-time
