@@ -10,7 +10,7 @@ router = APIRouter()
 FAKE_USERS_DB = {
     "fred": {
         "username": "fred",
-        "hashed_password": get_password_hash("secret"), # mock password
+        "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWrn96pzwLoOeMRug9SN1f0y1Z.qHW", # hash for "secret"
         "disabled": False,
     }
 }
